@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "191258108233",
+    "project_id": "ezybuy-72209",
+    "storage_bucket": "ezybuy-72209.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:191258108233:android:9f8b7c94e9627a779e7a98",
+        "android_client_info": {
+          "package_name": "com.example.ezy_buy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJy3t4AyE-bJQ-XEtG9mdiTtQTSa-HFPE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:191258108233:android:14696de3769021059e7a98",
+        "android_client_info": {
+          "package_name": "com.example.ezy_buy_adminn"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJy3t4AyE-bJQ-XEtG9mdiTtQTSa-HFPE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
