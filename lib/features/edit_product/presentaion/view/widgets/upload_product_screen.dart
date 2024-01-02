@@ -4,12 +4,14 @@ import 'package:ezy_buy_adminn/core/constant/constant.dart';
 import 'package:ezy_buy_adminn/core/helper/functions.dart';
 import 'package:ezy_buy_adminn/core/widgets/subtitle_text.dart';
 import 'package:ezy_buy_adminn/core/widgets/title_text.dart';
+import 'package:ezy_buy_adminn/features/edit_product/data/models/prodcut_model.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 
 class UploadProduct extends StatefulWidget {
-  const UploadProduct({super.key});
+  const UploadProduct({super.key, required this.productModel});
+  final ProductModel? productModel;
 
   @override
   State<UploadProduct> createState() => _UploadProductState();
@@ -23,6 +25,9 @@ class _UploadProductState extends State<UploadProduct> {
   var validate = GlobalKey<FormState>();
   String? category;
   XFile? _pickedImage;
+  bool isEditing = false;
+
+  String? productNetworkImage;
 
 //upload Image
   Future<void> localImagePicker() async {
@@ -61,6 +66,20 @@ class _UploadProductState extends State<UploadProduct> {
     }
   }
 
+  Future<void> _editProduct() async {
+    final isValid = validate.currentState!.validate();
+    FocusScope.of(context).unfocus();
+    if (_pickedImage == null && productNetworkImage == null) {
+      AppFunction.showErrorORWarningDialog(
+        context: context,
+        subtitle: "Please pick up an image",
+        fct: () {},
+      );
+      return;
+    }
+    if (isValid) {}
+  }
+
   Future<void> _clear() async {
     titleController.clear();
     descriptionController.clear();
@@ -70,21 +89,30 @@ class _UploadProductState extends State<UploadProduct> {
 
   @override
   void initState() {
-    titleController = TextEditingController();
-    priceController = TextEditingController();
-    quantityController = TextEditingController();
-    descriptionController = TextEditingController();
+    if (widget.productModel != null) {
+      isEditing = true;
+      productNetworkImage = widget.productModel!.productImage;
+      category = widget.productModel!.productCategory;
+    }
+    titleController =
+        TextEditingController(text: widget.productModel?.productTitle);
+    priceController =
+        TextEditingController(text: widget.productModel?.productPrice);
+    quantityController =
+        TextEditingController(text: widget.productModel?.productQuantity);
+    descriptionController =
+        TextEditingController(text: widget.productModel?.productDescription);
 
     super.initState();
   }
 
   @override
-  void dispose() {
+  void dispose() async {
+    removePickedImage();
     titleController.dispose();
     priceController.dispose();
     quantityController.dispose();
     descriptionController.dispose();
-    removePickedImage();
     super.dispose();
   }
 
@@ -135,14 +163,14 @@ class _UploadProductState extends State<UploadProduct> {
                     ),
                   ),
                   icon: const Icon(Icons.upload),
-                  label: const Text(
-                    "Upload Product",
-                    style: TextStyle(
+                  label: Text(
+                    isEditing ? "Edit Product" : "Upload Product",
+                    style: const TextStyle(
                       fontSize: 20,
                     ),
                   ),
                   onPressed: () {
-                    _uploadProduct();
+                    isEditing ? _editProduct() : _uploadProduct();
                   },
                 ),
               ],
@@ -151,8 +179,8 @@ class _UploadProductState extends State<UploadProduct> {
         ),
         appBar: AppBar(
           centerTitle: true,
-          title: const TitlesTextWidget(
-            label: "Upload a new product",
+          title: TitlesTextWidget(
+            label: isEditing ? "Edit Product" : "Upload a new product",
           ),
         ),
         body: SafeArea(
@@ -162,7 +190,16 @@ class _UploadProductState extends State<UploadProduct> {
                 const SizedBox(
                   height: 20,
                 ),
-                if (_pickedImage == null) ...[
+                if (isEditing && productNetworkImage != null) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      productNetworkImage!,
+                      height: size.width * 0.5,
+                      alignment: Alignment.center,
+                    ),
+                  ),
+                ] else if (_pickedImage == null) ...[
                   Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(15.0),
@@ -229,7 +266,7 @@ class _UploadProductState extends State<UploadProduct> {
                   height: 25,
                 ),
                 DropdownButton<String>(
-                  hint: const Text("Select Category"),
+                  hint: Text(category ?? "Select Category"),
                   value: category,
                   items: AppConstants.categoryProducts,
                   onChanged: (String? value) {

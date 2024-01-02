@@ -1,6 +1,8 @@
+import 'package:ezy_buy_adminn/core/constant/app_router.dart';
 import 'package:ezy_buy_adminn/features/edit_product/presentaion/view_model/provider/product_provider.dart';
 import 'package:fancy_shimmer_image/fancy_shimmer_image.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'subtitle_text.dart';
 import 'title_text.dart';
@@ -29,11 +31,9 @@ class _ProductWidgetState extends State<ProductWidget> {
             padding: const EdgeInsets.all(3.0),
             child: GestureDetector(
               onTap: () async {
-                // await Navigator.pushNamed(
-                //   context,
-                //   ProductDetails.routName,
-                //   arguments: getCurrProduct.productId,
-                // );
+                await GoRouter.of(context).push(
+                    NamedRouteScreen.kEditProductScreen,
+                    extra: getCurrProduct);
               },
               child: Column(
                 children: [
