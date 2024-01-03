@@ -1,16 +1,22 @@
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ezy_buy_adminn/core/constant/constant.dart';
 import 'package:ezy_buy_adminn/core/helper/functions.dart';
+import 'package:ezy_buy_adminn/core/widgets/loading_indicator.dart';
 import 'package:ezy_buy_adminn/core/widgets/subtitle_text.dart';
 import 'package:ezy_buy_adminn/core/widgets/title_text.dart';
 import 'package:ezy_buy_adminn/features/edit_product/data/models/prodcut_model.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
+import 'package:uuid/uuid.dart';
 
 class UploadProduct extends StatefulWidget {
-  const UploadProduct({super.key, required this.productModel});
+  const UploadProduct({super.key, this.productModel});
   final ProductModel? productModel;
 
   @override
@@ -26,6 +32,8 @@ class _UploadProductState extends State<UploadProduct> {
   String? category;
   XFile? _pickedImage;
   bool isEditing = false;
+  bool _isLoading = false;
+  String? productImageUrl;
 
   String? productNetworkImage;
 
@@ -59,10 +67,83 @@ class _UploadProductState extends State<UploadProduct> {
 
   //Upload Product
   Future<void> _uploadProduct() async {
-    validate.currentState!.validate();
+    final isValid = validate.currentState!.validate();
+    FocusScope.of(context).unfocus();
+    if (_pickedImage == null) {
+      AppFunction.showErrorORWarningDialog(
+        context: context,
+        subtitle: "Make sure to pick up an image",
+        fct: () {},
+      );
+      return;
+    }
     if (category == null) {
       AppFunction.showErrorORWarningDialog(
-          context: context, subtitle: "Choose Category", fct: () {});
+        context: context,
+        subtitle: "Category is empty",
+        fct: () {},
+      );
+
+      return;
+    }
+    if (isValid) {
+      validate.currentState!.save();
+      try {
+        setState(() {
+          _isLoading = true;
+        });
+        final ref = FirebaseStorage.instance
+            .ref()
+            .child("productsImages")
+            .child('${titleController.text.trim()}.jpg');
+        await ref.putFile(File(_pickedImage!.path));
+        productImageUrl = await ref.getDownloadURL();
+
+        final productID = const Uuid().v4();
+        await FirebaseFirestore.instance
+            .collection("products")
+            .doc(productID)
+            .set({
+          'productId': productID,
+          'productTitle': titleController.text,
+          'productPrice': priceController.text,
+          'productImage': productImageUrl,
+          'productCategory': category,
+          'productDescription': descriptionController.text,
+          'productQuantity': quantityController.text,
+          'createdAt': Timestamp.now(),
+        });
+        Fluttertoast.showToast(
+          msg: "Product has been added",
+          toastLength: Toast.LENGTH_SHORT,
+          textColor: Colors.white,
+        );
+        if (!mounted) return;
+        await AppFunction.showErrorORWarningDialog(
+          isError: false,
+          context: context,
+          subtitle: "Clear form?",
+          fct: () {
+            _clear();
+          },
+        );
+      } on FirebaseException catch (error) {
+        await AppFunction.showErrorORWarningDialog(
+          context: context,
+          subtitle: "An error has been occured ${error.message}",
+          fct: () {},
+        );
+      } catch (error) {
+        await AppFunction.showErrorORWarningDialog(
+          context: context,
+          subtitle: "An error has been occured $error",
+          fct: () {},
+        );
+      } finally {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -80,7 +161,8 @@ class _UploadProductState extends State<UploadProduct> {
     if (isValid) {}
   }
 
-  Future<void> _clear() async {
+  void _clear() async {
+    removePickedImage();
     titleController.clear();
     descriptionController.clear();
     priceController.clear();
@@ -108,7 +190,6 @@ class _UploadProductState extends State<UploadProduct> {
 
   @override
   void dispose() async {
-    removePickedImage();
     titleController.dispose();
     priceController.dispose();
     quantityController.dispose();
@@ -183,205 +264,208 @@ class _UploadProductState extends State<UploadProduct> {
             label: isEditing ? "Edit Product" : "Upload a new product",
           ),
         ),
-        body: SafeArea(
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                const SizedBox(
-                  height: 20,
-                ),
-                if (isEditing && productNetworkImage != null) ...[
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      productNetworkImage!,
-                      height: size.width * 0.5,
-                      alignment: Alignment.center,
-                    ),
+        body: LoadingManager(
+          isLoading: _isLoading,
+          child: SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  const SizedBox(
+                    height: 20,
                   ),
-                ] else if (_pickedImage == null) ...[
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(15.0),
-                      border: Border.all(width: 1),
+                  if (isEditing && productNetworkImage != null) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        productNetworkImage!,
+                        height: size.width * 0.5,
+                        alignment: Alignment.center,
+                      ),
                     ),
-                    width: size.width * 0.4 + 10,
-                    height: size.width * 0.4,
-                    child: Center(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.image_outlined,
-                            size: 80,
-                            color: Colors.blue,
+                  ] else if (_pickedImage == null) ...[
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(15.0),
+                        border: Border.all(width: 1),
+                      ),
+                      width: size.width * 0.4 + 10,
+                      height: size.width * 0.4,
+                      child: Center(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.image_outlined,
+                              size: 80,
+                              color: Colors.blue,
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                localImagePicker();
+                              },
+                              child: const Text("Pick Product image"),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(
+                        File(
+                          _pickedImage!.path,
+                        ),
+                        // width: size.width * 0.7,
+                        height: size.width * 0.5,
+                        alignment: Alignment.center,
+                      ),
+                    ),
+                  ],
+                  if (_pickedImage != null) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            localImagePicker();
+                          },
+                          child: const Text("Pick another image"),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            removePickedImage();
+                          },
+                          child: const Text(
+                            "Remove image",
+                            style: TextStyle(color: Colors.red),
                           ),
-                          TextButton(
-                            onPressed: () {
-                              localImagePicker();
+                        ),
+                      ],
+                    )
+                  ],
+                  const SizedBox(
+                    height: 25,
+                  ),
+                  DropdownButton<String>(
+                    hint: Text(category ?? "Select Category"),
+                    value: category,
+                    items: AppConstants.categoryProducts,
+                    onChanged: (String? value) {
+                      setState(() {
+                        category = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(
+                    height: 25,
+                  ),
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                    child: Form(
+                      key: validate,
+                      child: Column(
+                        children: [
+                          TextFormField(
+                            controller: titleController,
+                            key: const ValueKey('Title'),
+                            maxLength: 80,
+                            minLines: 1,
+                            maxLines: 2,
+                            keyboardType: TextInputType.multiline,
+                            textInputAction: TextInputAction.newline,
+                            decoration: const InputDecoration(
+                              hintText: 'Product Title',
+                            ),
+                            validator: (value) {
+                              return AppFunction.validate(
+                                value: value,
+                                returnText: "Please enter a valid title",
+                              );
                             },
-                            child: const Text("Pick Product image"),
+                          ),
+                          const SizedBox(
+                            height: 10,
+                          ),
+                          Row(
+                            children: [
+                              Flexible(
+                                flex: 1,
+                                child: TextFormField(
+                                  controller: priceController,
+                                  key: const ValueKey('Price \$'),
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: <TextInputFormatter>[
+                                    FilteringTextInputFormatter.allow(
+                                      RegExp(r'^(\d+)?\.?\d{0,2}'),
+                                    ),
+                                  ],
+                                  decoration: const InputDecoration(
+                                      hintText: 'Price',
+                                      prefix: SubtitleTextWidget(label: '\$')),
+                                  validator: (value) {
+                                    return AppFunction.validate(
+                                      value: value,
+                                      returnText: "Price is missing",
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(
+                                width: 10,
+                              ),
+                              Flexible(
+                                flex: 1,
+                                child: TextFormField(
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly
+                                  ],
+                                  controller: quantityController,
+                                  keyboardType: TextInputType.number,
+                                  key: const ValueKey('Quantity'),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Qty',
+                                  ),
+                                  validator: (value) {
+                                    return AppFunction.validate(
+                                      value: value,
+                                      returnText: "Quantity is missed",
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 15),
+                          TextFormField(
+                            key: const ValueKey('Description'),
+                            controller: descriptionController,
+                            minLines: 5,
+                            maxLines: 8,
+                            maxLength: 1000,
+                            textCapitalization: TextCapitalization.sentences,
+                            decoration: const InputDecoration(
+                              hintText: 'Product description',
+                            ),
+                            validator: (value) {
+                              return AppFunction.validate(
+                                value: value,
+                                returnText: "Description is missed",
+                              );
+                            },
+                            onTap: () {},
                           ),
                         ],
                       ),
                     ),
                   ),
-                ] else ...[
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.file(
-                      File(
-                        _pickedImage!.path,
-                      ),
-                      // width: size.width * 0.7,
-                      height: size.width * 0.5,
-                      alignment: Alignment.center,
-                    ),
-                  ),
-                ],
-                if (_pickedImage != null) ...[
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          localImagePicker();
-                        },
-                        child: const Text("Pick another image"),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          removePickedImage();
-                        },
-                        child: const Text(
-                          "Remove image",
-                          style: TextStyle(color: Colors.red),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(
+                    height: kBottomNavigationBarHeight + 10,
                   )
                 ],
-                const SizedBox(
-                  height: 25,
-                ),
-                DropdownButton<String>(
-                  hint: Text(category ?? "Select Category"),
-                  value: category,
-                  items: AppConstants.categoryProducts,
-                  onChanged: (String? value) {
-                    setState(() {
-                      category = value;
-                    });
-                  },
-                ),
-                const SizedBox(
-                  height: 25,
-                ),
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                  child: Form(
-                    key: validate,
-                    child: Column(
-                      children: [
-                        TextFormField(
-                          controller: titleController,
-                          key: const ValueKey('Title'),
-                          maxLength: 80,
-                          minLines: 1,
-                          maxLines: 2,
-                          keyboardType: TextInputType.multiline,
-                          textInputAction: TextInputAction.newline,
-                          decoration: const InputDecoration(
-                            hintText: 'Product Title',
-                          ),
-                          validator: (value) {
-                            return AppFunction.validate(
-                              value: value,
-                              returnText: "Please enter a valid title",
-                            );
-                          },
-                        ),
-                        const SizedBox(
-                          height: 10,
-                        ),
-                        Row(
-                          children: [
-                            Flexible(
-                              flex: 1,
-                              child: TextFormField(
-                                controller: priceController,
-                                key: const ValueKey('Price \$'),
-                                keyboardType: TextInputType.number,
-                                inputFormatters: <TextInputFormatter>[
-                                  FilteringTextInputFormatter.allow(
-                                    RegExp(r'^(\d+)?\.?\d{0,2}'),
-                                  ),
-                                ],
-                                decoration: const InputDecoration(
-                                    hintText: 'Price',
-                                    prefix: SubtitleTextWidget(label: '\$')),
-                                validator: (value) {
-                                  return AppFunction.validate(
-                                    value: value,
-                                    returnText: "Price is missing",
-                                  );
-                                },
-                              ),
-                            ),
-                            const SizedBox(
-                              width: 10,
-                            ),
-                            Flexible(
-                              flex: 1,
-                              child: TextFormField(
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly
-                                ],
-                                controller: quantityController,
-                                keyboardType: TextInputType.number,
-                                key: const ValueKey('Quantity'),
-                                decoration: const InputDecoration(
-                                  hintText: 'Qty',
-                                ),
-                                validator: (value) {
-                                  return AppFunction.validate(
-                                    value: value,
-                                    returnText: "Quantity is missed",
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 15),
-                        TextFormField(
-                          key: const ValueKey('Description'),
-                          controller: descriptionController,
-                          minLines: 5,
-                          maxLines: 8,
-                          maxLength: 1000,
-                          textCapitalization: TextCapitalization.sentences,
-                          decoration: const InputDecoration(
-                            hintText: 'Product description',
-                          ),
-                          validator: (value) {
-                            return AppFunction.validate(
-                              value: value,
-                              returnText: "Description is missed",
-                            );
-                          },
-                          onTap: () {},
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(
-                  height: kBottomNavigationBarHeight + 10,
-                )
-              ],
+              ),
             ),
           ),
         ),

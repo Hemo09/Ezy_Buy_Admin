@@ -1,5 +1,6 @@
 import 'package:ezy_buy_adminn/core/constant/app_images.dart';
 import 'package:ezy_buy_adminn/core/constant/app_router.dart';
+import 'package:ezy_buy_adminn/features/edit_product/data/models/prodcut_model.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -7,8 +8,13 @@ class DasboardModel {
   final String text;
   final String image;
   final Function() press;
+  final ProductModel? model;
 
-  DasboardModel({required this.text, required this.image, required this.press});
+  DasboardModel(
+      {required this.text,
+      required this.image,
+      required this.press,
+      this.model});
   static List<DasboardModel> dasboardCard(BuildContext context) => [
         DasboardModel(
             text: "Add a new product",
@@ -26,8 +32,7 @@ class DasboardModel {
             text: "View orders",
             image: AppImages.order,
             press: () {
-              GoRouter.of(context)
-                  .push(NamedRouteScreen.kOrderScreen, extra: null);
+              GoRouter.of(context).push(NamedRouteScreen.kOrderScreen);
             }),
       ];
 }
