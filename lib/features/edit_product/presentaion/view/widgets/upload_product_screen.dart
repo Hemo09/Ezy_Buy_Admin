@@ -323,7 +323,7 @@ class _UploadProductState extends State<UploadProduct> {
                       ),
                     ),
                   ],
-                  if (_pickedImage != null) ...[
+                  if (_pickedImage != null || productNetworkImage != null) ...[
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
