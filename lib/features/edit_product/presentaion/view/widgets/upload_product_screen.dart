@@ -7,7 +7,6 @@ import 'package:ezy_buy_adminn/core/widgets/loading_indicator.dart';
 import 'package:ezy_buy_adminn/core/widgets/subtitle_text.dart';
 import 'package:ezy_buy_adminn/core/widgets/title_text.dart';
 import 'package:ezy_buy_adminn/features/edit_product/data/models/prodcut_model.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -15,59 +14,75 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 
-class UploadProduct extends StatefulWidget {
-  const UploadProduct({super.key, this.productModel});
+class EditOrUploadProductScreen extends StatefulWidget {
+  const EditOrUploadProductScreen({
+    super.key,
+    this.productModel,
+  });
   final ProductModel? productModel;
-
   @override
-  State<UploadProduct> createState() => _UploadProductState();
+  State<EditOrUploadProductScreen> createState() =>
+      _EditOrUploadProductScreenState();
 }
 
-class _UploadProductState extends State<UploadProduct> {
-  late TextEditingController titleController;
-  late TextEditingController priceController;
-  late TextEditingController quantityController;
-  late TextEditingController descriptionController;
-  var validate = GlobalKey<FormState>();
-  String? category;
+class _EditOrUploadProductScreenState extends State<EditOrUploadProductScreen> {
+  final _formKey = GlobalKey<FormState>();
   XFile? _pickedImage;
   bool isEditing = false;
-  bool _isLoading = false;
-  String? productImageUrl;
-
   String? productNetworkImage;
 
-//upload Image
-  Future<void> localImagePicker() async {
-    final ImagePicker picker = ImagePicker();
-    await AppFunction.imagePickerDialog(
-      context: context,
-      cameraFCT: () async {
-        _pickedImage = await picker.pickImage(source: ImageSource.camera);
-        setState(() {});
-      },
-      galleryFCT: () async {
-        _pickedImage = await picker.pickImage(source: ImageSource.gallery);
-        setState(() {});
-      },
-      removeFCT: () {
-        setState(() {
-          _pickedImage = null;
-        });
-      },
-    );
+  late TextEditingController _titleController,
+      _priceController,
+      _descriptionController,
+      _quantityController;
+  String? _categoryValue;
+  bool _isLoading = false;
+  String? productImageUrl;
+  @override
+  void initState() {
+    if (widget.productModel != null) {
+      isEditing = true;
+      productNetworkImage = widget.productModel!.productImage;
+      _categoryValue = widget.productModel!.productCategory;
+    }
+    _titleController =
+        TextEditingController(text: widget.productModel?.productTitle);
+    _priceController =
+        TextEditingController(text: widget.productModel?.productPrice);
+    _descriptionController =
+        TextEditingController(text: widget.productModel?.productDescription);
+    _quantityController =
+        TextEditingController(text: widget.productModel?.productQuantity);
+
+    super.initState();
   }
 
-  // remove Image
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _priceController.dispose();
+    _descriptionController.dispose();
+    _quantityController.dispose();
+    super.dispose();
+  }
+
+  void clearForm() {
+    _titleController.clear();
+    _priceController.clear();
+    _descriptionController.clear();
+    _quantityController.clear();
+    removePickedImage();
+  }
+
   void removePickedImage() {
     setState(() {
       _pickedImage = null;
+      productNetworkImage = null;
     });
   }
 
-  //Upload Product
   Future<void> _uploadProduct() async {
-    final isValid = validate.currentState!.validate();
+    final isValid = _formKey.currentState!.validate();
     FocusScope.of(context).unfocus();
     if (_pickedImage == null) {
       AppFunction.showErrorORWarningDialog(
@@ -77,7 +92,7 @@ class _UploadProductState extends State<UploadProduct> {
       );
       return;
     }
-    if (category == null) {
+    if (_categoryValue == null) {
       AppFunction.showErrorORWarningDialog(
         context: context,
         subtitle: "Category is empty",
@@ -87,17 +102,20 @@ class _UploadProductState extends State<UploadProduct> {
       return;
     }
     if (isValid) {
-      validate.currentState!.save();
+      _formKey.currentState!.save();
       try {
         setState(() {
           _isLoading = true;
         });
-        final ref = FirebaseStorage.instance
-            .ref()
-            .child("productsImages")
-            .child('${titleController.text.trim()}.jpg');
-        await ref.putFile(File(_pickedImage!.path));
-        productImageUrl = await ref.getDownloadURL();
+        if (_pickedImage != null) {
+          final productID = const Uuid().v4();
+          final ref = FirebaseStorage.instance
+              .ref()
+              .child("productsImages")
+              .child('$productID.jpg');
+          await ref.putFile(File(_pickedImage!.path));
+          productImageUrl = await ref.getDownloadURL();
+        }
 
         final productID = const Uuid().v4();
         await FirebaseFirestore.instance
@@ -105,12 +123,12 @@ class _UploadProductState extends State<UploadProduct> {
             .doc(productID)
             .set({
           'productId': productID,
-          'productTitle': titleController.text,
-          'productPrice': priceController.text,
+          'productTitle': _titleController.text,
+          'productPrice': _priceController.text,
           'productImage': productImageUrl,
-          'productCategory': category,
-          'productDescription': descriptionController.text,
-          'productQuantity': quantityController.text,
+          'productCategory': _categoryValue,
+          'productDescription': _descriptionController.text,
+          'productQuantity': _quantityController.text,
           'createdAt': Timestamp.now(),
         });
         Fluttertoast.showToast(
@@ -124,7 +142,7 @@ class _UploadProductState extends State<UploadProduct> {
           context: context,
           subtitle: "Clear form?",
           fct: () {
-            _clear();
+            clearForm();
           },
         );
       } on FirebaseException catch (error) {
@@ -148,7 +166,7 @@ class _UploadProductState extends State<UploadProduct> {
   }
 
   Future<void> _editProduct() async {
-    final isValid = validate.currentState!.validate();
+    final isValid = _formKey.currentState!.validate();
     FocusScope.of(context).unfocus();
     if (_pickedImage == null && productNetworkImage == null) {
       AppFunction.showErrorORWarningDialog(
@@ -158,115 +176,173 @@ class _UploadProductState extends State<UploadProduct> {
       );
       return;
     }
-    if (isValid) {}
-  }
+    if (_categoryValue == null) {
+      AppFunction.showErrorORWarningDialog(
+        context: context,
+        subtitle: "Category is empty",
+        fct: () {},
+      );
 
-  void _clear() async {
-    removePickedImage();
-    titleController.clear();
-    descriptionController.clear();
-    priceController.clear();
-    descriptionController.clear();
-  }
-
-  @override
-  void initState() {
-    if (widget.productModel != null) {
-      isEditing = true;
-      productNetworkImage = widget.productModel!.productImage;
-      category = widget.productModel!.productCategory;
+      return;
     }
-    titleController =
-        TextEditingController(text: widget.productModel?.productTitle);
-    priceController =
-        TextEditingController(text: widget.productModel?.productPrice);
-    quantityController =
-        TextEditingController(text: widget.productModel?.productQuantity);
-    descriptionController =
-        TextEditingController(text: widget.productModel?.productDescription);
+    if (isValid) {
+      _formKey.currentState!.save();
+      try {
+        setState(() {
+          _isLoading = true;
+        });
+        if (_pickedImage != null) {
+          final ref = FirebaseStorage.instance
+              .ref()
+              .child("productsImages")
+              .child('${widget.productModel!.productId}.jpg');
+          await ref.putFile(File(_pickedImage!.path));
+          productImageUrl = await ref.getDownloadURL();
+        }
 
-    super.initState();
+        await FirebaseFirestore.instance
+            .collection("products")
+            .doc(widget.productModel!.productId)
+            .update({
+          'productId': widget.productModel!.productId,
+          'productTitle': _titleController.text,
+          'productPrice': _priceController.text,
+          'productImage': productImageUrl ?? productNetworkImage,
+          'productCategory': _categoryValue,
+          'productDescription': _descriptionController.text,
+          'productQuantity': _quantityController.text,
+          'createdAt': widget.productModel!.createdAt,
+        });
+        Fluttertoast.showToast(
+          msg: "Product has been edited",
+          toastLength: Toast.LENGTH_SHORT,
+          textColor: Colors.white,
+        );
+        if (!mounted) return;
+        await AppFunction.showErrorORWarningDialog(
+          isError: false,
+          context: context,
+          subtitle: "Clear form?",
+          fct: () {
+            clearForm();
+          },
+        );
+      } on FirebaseException catch (error) {
+        await AppFunction.showErrorORWarningDialog(
+          context: context,
+          subtitle: "An error has been occured ${error.message}",
+          fct: () {},
+        );
+      } catch (error) {
+        await AppFunction.showErrorORWarningDialog(
+          context: context,
+          subtitle: "An error has been occured $error",
+          fct: () {},
+        );
+      } finally {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
-  @override
-  void dispose() async {
-    titleController.dispose();
-    priceController.dispose();
-    quantityController.dispose();
-    descriptionController.dispose();
-    super.dispose();
+  Future<void> localImagePicker() async {
+    final ImagePicker picker = ImagePicker();
+    await AppFunction.imagePickerDialog(
+      context: context,
+      cameraFCT: () async {
+        _pickedImage = await picker.pickImage(source: ImageSource.camera);
+        setState(() {
+          productNetworkImage = null;
+        });
+      },
+      galleryFCT: () async {
+        _pickedImage = await picker.pickImage(source: ImageSource.gallery);
+        setState(() {
+          productNetworkImage = null;
+        });
+      },
+      removeFCT: () {
+        setState(() {
+          _pickedImage = null;
+        });
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    return GestureDetector(
-      onTap: () {
-        FocusScope.of(context).unfocus();
-      },
-      child: Scaffold(
-        bottomSheet: SizedBox(
-          height: kBottomNavigationBarHeight + 10,
-          child: Material(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.all(12),
-                    backgroundColor: Colors.red,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(
-                        10,
+    return LoadingManager(
+      isLoading: _isLoading,
+      child: GestureDetector(
+        onTap: () {
+          FocusScope.of(context).unfocus();
+        },
+        child: Scaffold(
+          bottomSheet: SizedBox(
+            height: kBottomNavigationBarHeight + 10,
+            child: Material(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.all(12),
+                      backgroundColor: Colors.red,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          10,
+                        ),
                       ),
                     ),
-                  ),
-                  icon: const Icon(Icons.clear),
-                  label: const Text(
-                    "Clear",
-                    style: TextStyle(
-                      fontSize: 20,
-                    ),
-                  ),
-                  onPressed: () {
-                    _clear();
-                  },
-                ),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.all(12),
-                    // backgroundColor: Colors.red,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(
-                        10,
+                    icon: const Icon(Icons.clear),
+                    label: const Text(
+                      "Clear",
+                      style: TextStyle(
+                        fontSize: 20,
                       ),
                     ),
+                    onPressed: () {},
                   ),
-                  icon: const Icon(Icons.upload),
-                  label: Text(
-                    isEditing ? "Edit Product" : "Upload Product",
-                    style: const TextStyle(
-                      fontSize: 20,
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.all(12),
+                      // backgroundColor: Colors.red,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          10,
+                        ),
+                      ),
                     ),
+                    icon: const Icon(Icons.upload),
+                    label: Text(
+                      isEditing ? "Edit Product" : "Upload Product",
+                      style: const TextStyle(
+                        fontSize: 20,
+                      ),
+                    ),
+                    onPressed: () {
+                      if (isEditing) {
+                        _editProduct();
+                      } else {
+                        _uploadProduct();
+                      }
+                    },
                   ),
-                  onPressed: () {
-                    isEditing ? _editProduct() : _uploadProduct();
-                  },
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-        appBar: AppBar(
-          centerTitle: true,
-          title: TitlesTextWidget(
-            label: isEditing ? "Edit Product" : "Upload a new product",
+          appBar: AppBar(
+            centerTitle: true,
+            title: const TitlesTextWidget(
+              label: "Upload a new product",
+            ),
           ),
-        ),
-        body: LoadingManager(
-          isLoading: _isLoading,
-          child: SafeArea(
+          body: SafeArea(
             child: SingleChildScrollView(
               child: Column(
                 children: [
@@ -283,33 +359,28 @@ class _UploadProductState extends State<UploadProduct> {
                       ),
                     ),
                   ] else if (_pickedImage == null) ...[
-                    Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(15.0),
-                        border: Border.all(width: 1),
-                      ),
-                      width: size.width * 0.4 + 10,
-                      height: size.width * 0.4,
-                      child: Center(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.image_outlined,
-                              size: 80,
-                              color: Colors.blue,
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                localImagePicker();
-                              },
-                              child: const Text("Pick Product image"),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                    SizedBox(
+                        width: size.width * 0.4 + 10,
+                        height: size.width * 0.4,
+                        child: Center(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.image_outlined,
+                                size: 80,
+                                color: Colors.blue,
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  localImagePicker();
+                                },
+                                child: const Text("Pick Product image"),
+                              ),
+                            ],
+                          ),
+                        )),
                   ] else ...[
                     ClipRRect(
                       borderRadius: BorderRadius.circular(12),
@@ -349,12 +420,12 @@ class _UploadProductState extends State<UploadProduct> {
                     height: 25,
                   ),
                   DropdownButton<String>(
-                    hint: Text(category ?? "Select Category"),
-                    value: category,
+                    hint: Text(_categoryValue ?? "Select Category"),
+                    value: _categoryValue,
                     items: AppConstants.categoryProducts,
                     onChanged: (String? value) {
                       setState(() {
-                        category = value;
+                        _categoryValue = value;
                       });
                     },
                   ),
@@ -365,11 +436,11 @@ class _UploadProductState extends State<UploadProduct> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                     child: Form(
-                      key: validate,
+                      key: _formKey,
                       child: Column(
                         children: [
                           TextFormField(
-                            controller: titleController,
+                            controller: _titleController,
                             key: const ValueKey('Title'),
                             maxLength: 80,
                             minLines: 1,
@@ -394,7 +465,7 @@ class _UploadProductState extends State<UploadProduct> {
                               Flexible(
                                 flex: 1,
                                 child: TextFormField(
-                                  controller: priceController,
+                                  controller: _priceController,
                                   key: const ValueKey('Price \$'),
                                   keyboardType: TextInputType.number,
                                   inputFormatters: <TextInputFormatter>[
@@ -404,7 +475,11 @@ class _UploadProductState extends State<UploadProduct> {
                                   ],
                                   decoration: const InputDecoration(
                                       hintText: 'Price',
-                                      prefix: SubtitleTextWidget(label: '\$')),
+                                      prefix: SubtitleTextWidget(
+                                        label: "\$ ",
+                                        color: Colors.blue,
+                                        fontSize: 16,
+                                      )),
                                   validator: (value) {
                                     return AppFunction.validate(
                                       value: value,
@@ -422,7 +497,7 @@ class _UploadProductState extends State<UploadProduct> {
                                   inputFormatters: [
                                     FilteringTextInputFormatter.digitsOnly
                                   ],
-                                  controller: quantityController,
+                                  controller: _quantityController,
                                   keyboardType: TextInputType.number,
                                   key: const ValueKey('Quantity'),
                                   decoration: const InputDecoration(
@@ -441,7 +516,7 @@ class _UploadProductState extends State<UploadProduct> {
                           const SizedBox(height: 15),
                           TextFormField(
                             key: const ValueKey('Description'),
-                            controller: descriptionController,
+                            controller: _descriptionController,
                             minLines: 5,
                             maxLines: 8,
                             maxLength: 1000,

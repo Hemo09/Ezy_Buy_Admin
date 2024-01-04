@@ -20,7 +20,7 @@ class AppRoutes {
     ),
     GoRoute(
       path: NamedRouteScreen.kEditProductScreen,
-      builder: (context, state) => UploadProduct(),
+      builder: (context, state) => const EditOrUploadProductScreen(),
     ),
     GoRoute(
       path: NamedRouteScreen.kOrderScreen,

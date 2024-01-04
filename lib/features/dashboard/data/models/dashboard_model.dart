@@ -8,13 +8,12 @@ class DasboardModel {
   final String text;
   final String image;
   final Function() press;
-  final ProductModel? model;
 
-  DasboardModel(
-      {required this.text,
-      required this.image,
-      required this.press,
-      this.model});
+  DasboardModel({
+    required this.text,
+    required this.image,
+    required this.press,
+  });
   static List<DasboardModel> dasboardCard(BuildContext context) => [
         DasboardModel(
             text: "Add a new product",
